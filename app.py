@@ -22,7 +22,26 @@ if st.button("Generate Book"):
                 messages=[
                     {
                         "role": "user",
-                        "content": f"Write a detailed book outline about {topic}"
+                        "content": f"""
+你是一名出版级英语词汇书作者。
+
+任务：围绕【{topic}】写一本完整的雅思核心词汇书的一章内容。
+
+要求：
+1. 至少生成30个词（不是10个）
+2. 每个词必须包含：
+   - 单词
+   - 音标
+   - 中文解释
+   - 英文例句
+   - 中文翻译
+   - 2-3个同义替换
+3. 内容必须是“成书级”，不能是简单示例
+4. 输出要结构清晰，适合直接出版
+5. 不要解释，不要总结，直接给完整内容
+
+开始写：
+"""
                     }
                 ],
                 model="llama-3.3-70b-versatile",

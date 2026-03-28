@@ -25,7 +25,7 @@ if st.button("Generate Book"):
                         "content": f"Write a detailed book outline about {topic}"
                     }
                 ],
-                model="mixtral-8x7b-32768",
+                model="llama-3.3-70b-versatile",
             )
             st.write(response.choices[0].message.content)
         except Exception as e:

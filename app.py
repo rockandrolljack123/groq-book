@@ -18,13 +18,13 @@ if st.button("Generate Book"):
         st.warning("Please enter a topic")
     else:
         try:
-           response = client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
-    max_tokens=6000,
-    messages=[
-        {
-            "role": "user",
-            "content": f"""
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                max_tokens=6000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"""
 你是一名出版级英语词汇书作者。
 
 任务：围绕【{topic}】写一本完整的雅思核心词汇书的一章内容。
@@ -39,14 +39,16 @@ if st.button("Generate Book"):
    - 中文翻译
    - 2-3个同义替换
 3. 内容必须是“成书级”，不能是简单示例
-4. 输出要结构清晰，适合直接出版
-5. 不允许中途停止，必须写完50个词
+4. 不允许中途停止，必须写完50个词
+5. 不要解释，不要总结
 
 开始写：
 """
-        }
-    ]
-)
+                    }
+                ]
+            )
+
             st.write(response.choices[0].message.content)
+
         except Exception as e:
             st.error(str(e))

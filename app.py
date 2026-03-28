@@ -65,7 +65,6 @@ def sentence_matches_word(sentence, word):
     sentence_lower = sentence.lower()
     variants = build_variants(word)
 
-    # 短语优先直接匹配
     if " " in word or "-" in word:
         return word.lower() in sentence_lower
 
@@ -79,20 +78,20 @@ def sentence_matches_word(sentence, word):
 
 # =========================
 # 解析 clean txt
-# 标题格式必须是：
-# ### IELTS16 Test1 Reading Passage1
-# ### IELTS16 Test1 Listening Section2
+# 只读取 cam*.txt 和 clean*.txt
+# 明确排除 ielts_words.txt
 # =========================
 def parse_clean_corpus():
     items = []
 
-    txt_files = sorted(glob.glob("cam*.txt")) + sorted(glob.glob("clean*.txt")) + sorted(glob.glob("*ielts*.txt"))
+    txt_files = sorted(glob.glob("cam*.txt")) + sorted(glob.glob("clean*.txt"))
 
-    # 去重，避免同名重复
     seen_files = set()
     final_files = []
     for f in txt_files:
         base = os.path.basename(f)
+        if base.lower() == "ielts_words.txt":
+            continue
         if base not in seen_files:
             seen_files.add(base)
             final_files.append(f)
@@ -119,20 +118,25 @@ def parse_clean_corpus():
                 test = m.group(2)
                 section = m.group(3)
 
-                # 统一格式
                 book = book.replace(" ", "")
                 test = test.replace(" ", "")
                 section = re.sub(r"\s+", " ", section).strip()
-
-                # Passage1 / Section2 统一去掉中间多余空格
                 section = section.replace("Passage ", "Passage")
                 section = section.replace("Section ", "Section")
 
                 current_source = f"{book} {test} {section}"
                 continue
 
-            # 只收正文句子
+            # 只收“真正像句子”的正文
             if current_source:
+                # 至少3个单词，避免把 ability 这种单独单词当句子
+                if count_words(line) < 3:
+                    continue
+
+                # 必须包含空格，避免单个词
+                if " " not in line:
+                    continue
+
                 items.append({
                     "sentence": line,
                     "source": current_source
@@ -172,7 +176,6 @@ def choose_example(word, corpus_items, usage_counter):
         m = re.search(r"(IELTS\d+)", source, re.IGNORECASE)
         return m.group(1).upper() if m else "UNKNOWN"
 
-    # 按目前使用最少的册数优先
     min_used = None
     filtered = []
 
@@ -187,7 +190,6 @@ def choose_example(word, corpus_items, usage_counter):
         if usage_counter.get(bk, 0) == min_used:
             filtered.append(c)
 
-    # 固定随机，保证同一个词每次结果一致
     rng = random.Random(word.lower())
     chosen = rng.choice(filtered)
 
@@ -198,7 +200,7 @@ def choose_example(word, corpus_items, usage_counter):
 
 
 # =========================
-# AI 补 IPA / 中文解释 / 中文翻译
+# AI 补 IPA / 中文解释 / 翻译
 # =========================
 def enrich_word(word, example_text):
     response = client.chat.completions.create(

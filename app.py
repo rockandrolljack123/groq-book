@@ -14,170 +14,131 @@ if not api_key:
 
 client = Groq(api_key=api_key)
 
-# ===== 读取词表 =====
+# ===== 词表 =====
 def load_words():
     if not os.path.exists("ielts_words.txt"):
         return []
     with open("ielts_words.txt", "r", encoding="utf-8", errors="ignore") as f:
-        words = [w.strip() for w in f.readlines() if w.strip()]
-    return words
+        return [w.strip() for w in f.readlines() if w.strip()]
 
-# ===== 读取所有 cam 文件（不再写死文件名）=====
+# ===== 语料 + 文件来源 =====
 def load_corpus():
-    loaded_files = []
-    text_parts = []
+    all_sentences = []
 
-    # 读取所有 txt
+    # txt
     for file in sorted(glob.glob("cam*.txt")):
         try:
             with open(file, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-                if content.strip():
-                    text_parts.append(content)
-                    loaded_files.append(file)
-        except Exception:
+                text = f.read()
+                sentences = re.split(r'(?<=[.!?])\s+', text)
+                for s in sentences:
+                    s = s.strip()
+                    if len(s) > 25:
+                        all_sentences.append((s, file))
+        except:
             pass
 
-    # 读取所有 docx
+    # docx
     try:
         import docx
         for file in sorted(glob.glob("cam*.docx")):
             try:
                 doc = docx.Document(file)
-                paras = [p.text for p in doc.paragraphs if p.text.strip()]
-                content = "\n".join(paras)
-                if content.strip():
-                    text_parts.append(content)
-                    loaded_files.append(file)
-            except Exception:
+                text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                sentences = re.split(r'(?<=[.!?])\s+', text)
+                for s in sentences:
+                    s = s.strip()
+                    if len(s) > 25:
+                        all_sentences.append((s, file))
+            except:
                 pass
-    except Exception:
+    except:
         pass
 
-    corpus_text = "\n".join(text_parts)
-    corpus_text = re.sub(r"\s+", " ", corpus_text).strip()
-    return corpus_text, loaded_files
+    return all_sentences
 
-corpus, loaded_files = load_corpus()
+all_sentences = load_corpus()
 
-# ===== 切句（更稳）=====
-def split_sentences(text):
-    if not text:
-        return []
-    parts = re.split(r'(?<=[.!?])\s+', text)
-    clean_parts = []
-    for p in parts:
-        p = p.strip()
-        if len(p) >= 25:
-            clean_parts.append(p)
-    return clean_parts
-
-sentences = split_sentences(corpus)
-
-# ===== 更稳的例句检索 =====
+# ===== 查句子（返回句子+来源）=====
 def find_sentence(word):
     word = word.strip()
     if not word:
-        return None
+        return None, None
 
-    # 如果是词组，直接宽松匹配
+    # phrase
     if " " in word or "-" in word:
-        low_word = word.lower()
-        for s in sentences:
-            if low_word in s.lower():
-                return s
-        return None
+        for s, f in all_sentences:
+            if word.lower() in s.lower():
+                return s, f
 
-    # 如果是单个词，先做严格匹配
+    # exact
     pattern = re.compile(rf"\b{re.escape(word)}\b", re.IGNORECASE)
-    for s in sentences:
+    for s, f in all_sentences:
         if pattern.search(s):
-            return s
+            return s, f
 
-    # 再做常见词形变化匹配
+    # variants
     variants = [
         word,
         word + "s",
         word + "ed",
         word + "ing",
-        word[:-1] + "ing" if word.endswith("e") else word + "ing",
-        word + "ly",
-        word + "al",
-        word + "ion",
-        word + "ment",
+        word[:-1] + "ing" if word.endswith("e") else word + "ing"
     ]
 
     for v in variants:
         pattern_v = re.compile(rf"\b{re.escape(v)}\b", re.IGNORECASE)
-        for s in sentences:
+        for s, f in all_sentences:
             if pattern_v.search(s):
-                return s
+                return s, f
 
-    return None
+    return None, None
 
-# ===== AI补充信息 =====
+# ===== AI补充 =====
 def enrich(word, sentence):
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        max_tokens=800,
+        max_tokens=600,
         temperature=0.2,
         messages=[
-            {
-                "role": "system",
-                "content": "你是雅思词汇书作者。只输出简洁内容，不要解释。"
-            },
-            {
-                "role": "user",
-                "content": f"""
-给这个词补充信息：
+            {"role": "system", "content": "你是雅思词汇书作者，简洁输出"},
+            {"role": "user", "content": f"""
+词：{word}
 
-{word}
-
-例句：
-{sentence if sentence else "无"}
+例句：{sentence if sentence else "无"}
 
 输出：
 IPA:
 中文解释:
 例句翻译:
 同义词(2个):
-"""
-            }
+"""}
         ]
     )
-
     return response.choices[0].message.content
 
 # ===== UI =====
 words = load_words()
 
-st.write(f"当前词表数量: {len(words)}")
-st.write(f"已加载语料文件: {', '.join(loaded_files) if loaded_files else '无'}")
-st.write(f"语料句子数量: {len(sentences)}")
+st.write(f"词表数量: {len(words)}")
+st.write(f"语料句子数: {len(all_sentences)}")
 
 if st.button("Generate"):
-    if not words:
-        st.error("没有词表")
-    elif not sentences:
-        st.error("没有成功加载剑桥语料，请先检查 cam 文件是否已上传")
-    else:
-        found_count = 0
+    found = 0
 
-        for i, word in enumerate(words[:50], 1):
-            st.markdown(f"## {i}. {word}")
+    for i, word in enumerate(words[:50], 1):
+        st.markdown(f"## {i}. {word}")
 
-            sentence = find_sentence(word)
+        sentence, source = find_sentence(word)
 
-            if sentence:
-                found_count += 1
-                st.write(f"例句（Cambridge）: {sentence}")
-                st.write("来源: Cambridge 16–20（自动匹配）")
-            else:
-                st.write("⚠️ 未找到例句")
+        if sentence:
+            found += 1
+            st.write(sentence)
+            st.write(f"来源: {source}")
+        else:
+            st.write("⚠️ 未找到例句")
 
-            info = enrich(word, sentence)
-            st.write(info)
+        st.write(enrich(word, sentence))
+        st.markdown("---")
 
-            st.markdown("---")
-
-        st.success(f"本次 50 个词中，成功匹配到 {found_count} 个例句。")
+    st.success(f"匹配成功: {found}/50")

@@ -20,9 +20,9 @@ if st.button("Generate Book"):
         with st.spinner("Generating..."):
             try:
                 response = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "user", "content": f"Write a detailed book outline about {topic}"}
+    messages=[{"role": "user", "content": f"Write a book outline about {topic}"}],
+    model="mixtral-8x7b-32768",
+)
                     ]
                 )
                 result = response.choices[0].message.content
